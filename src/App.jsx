@@ -680,6 +680,13 @@ function App() {
   const [newAddress, setNewAddress] = useState('');
   const [newCity, setNewCity] = useState('');
   const [newStateVal, setNewStateVal] = useState('');
+  const DEFAULT_PERMISSIONS = { view: false, create: false, edit: false, delete: false };
+  const [newPermissions, setNewPermissions] = useState({
+    Deliveries: { ...DEFAULT_PERMISSIONS },
+    Collections: { ...DEFAULT_PERMISSIONS },
+    Orders: { ...DEFAULT_PERMISSIONS },
+    Master: { ...DEFAULT_PERMISSIONS },
+  });
   const [formSuccessMessage, setFormSuccessMessage] = useState('');
   const [formErrorMessage, setFormErrorMessage] = useState('');
   const [profileEmail, setProfileEmail] = useState('');
@@ -764,7 +771,7 @@ function App() {
 
   // --- Collections Sub-Tab Navigation ---
   const [collectionSubTab, setCollectionSubTab] = useState('unassigned');
-  const [masterSubTab, setMasterSubTab] = useState('itemMaster');
+  const [masterSubTab, setMasterSubTab] = useState(null);
   const [showMasterDropdown, setShowMasterDropdown] = useState(false);
   const [tallyItemMasterData, setTallyItemMasterData] = useState([]);
   const [tallyItemMasterLoading, setTallyItemMasterLoading] = useState(false);
@@ -925,11 +932,13 @@ function App() {
     try { localStorage.setItem('bj_assigned_col_vouchers', JSON.stringify(assignedColVoucherIds)); } catch(e) { console.error(e); }
   }, [assignedColVoucherIds]);
 
-  // Auto-fetch master data when Master tab first opened
+  // Auto-fetch master data when Master tab first opened; reset sub-tab on leave
   useEffect(() => {
     if (activeTab === 'Master') {
       if (!tallyItemMasterFetched && !tallyItemMasterLoading) handleFetchItemMasterData();
       if (!tallyLedgerMasterFetched && !tallyLedgerMasterLoading) handleFetchLedgerMasterData();
+    } else {
+      setMasterSubTab(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
@@ -1069,7 +1078,8 @@ function App() {
       role: newRole,
       password: finalPassword,
       isActive: true,
-      joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      joinedDate: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }),
+      permissions: newRole === 'admin' ? null : newPermissions,
     };
 
     setUsers((prev) => [...prev, newUser]);
@@ -1105,6 +1115,7 @@ function App() {
     setCustomers(false);
     setOrders(false);
     setBeatMaster(false);
+    setNewPermissions({ Deliveries: { view: false, create: false, edit: false, delete: false }, Collections: { view: false, create: false, edit: false, delete: false }, Orders: { view: false, create: false, edit: false, delete: false }, Master: { view: false, create: false, edit: false, delete: false } });
 
     // Close the popup modal
     setShowAddEmployeeModal(false);
@@ -1118,14 +1129,16 @@ function App() {
         const dData = await dRes.json();
         const mappedDeliveries = dData.map(d => {
           const completedAt = d.completed_at ? new Date(d.completed_at) : null;
+          const assignedToId = Number(d.assigned_to);
+          const assignedToName = d.assigned_to_name || users.find(u => u.id === assignedToId)?.name || '';
           return {
             id: d.id,
             product: d.item_description || 'Outstanding Bill',
             customerName: d.party_name,
             customerPhone: d.party_phone || '',
             targetLocation: d.party_address || '',
-            assignedToId: Number(d.assigned_to),
-            assignedToName: d.assigned_to_name || '',
+            assignedToId,
+            assignedToName,
             status: d.status === 'completed' ? 'delivered' : 'pending',
             assignedDate: d.assigned_at ? new Date(d.assigned_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : d.voucher_date,
             notes: d.notes || 'None',
@@ -1153,14 +1166,16 @@ function App() {
         const cData = await cRes.json();
         const mappedCollections = cData.map(c => {
           const completedAt = c.completed_at ? new Date(c.completed_at) : null;
+          const assignedToId = Number(c.assigned_to);
+          const assignedToName = c.assigned_to_name || users.find(u => u.id === assignedToId)?.name || '';
           return {
             id: c.id,
             clientName: c.party_name,
             clientPhone: c.party_phone || '',
             location: c.party_address || '',
             amountToCollect: c.amount || 0,
-            assignedToId: Number(c.assigned_to),
-            assignedToName: c.assigned_to_name || '',
+            assignedToId,
+            assignedToName,
             status: c.status,
             assignedDate: c.assigned_at ? new Date(c.assigned_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : c.voucher_date,
             amountCollected: c.amount_collected || 0,
@@ -2296,7 +2311,7 @@ function App() {
               >
                 <button
                   className={`nav-item ${activeTab === 'Master' ? 'active' : ''}`}
-                  onClick={() => { setActiveTab('Master'); setMasterSubTab('itemMaster'); setMobileNavOpen(false); }}
+                  onClick={() => { setActiveTab('Master'); setMasterSubTab(null); setMobileNavOpen(false); }}
                 >
                   <Package size={16} />
                   Master
@@ -3308,7 +3323,8 @@ function App() {
         {/* --- DELIVERIES MODULE TAB (ADMIN AND STAFF VIEW) --- */}
         {activeTab === 'Deliveries' && (
           <div className="animate-fade-in" style={{ width: '100%', paddingBottom: '1.5rem' }}>
-            
+
+            <div className="tab-sticky-header">
             {/* Header section */}
             <div style={{ marginBottom: '0.4rem' }}>
               <h1 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>
@@ -3428,6 +3444,7 @@ function App() {
                 </span>
               </button>
             </div>
+            </div>{/* end tab-sticky-header */}
 
             {/* TAB CONTENT: UNASSIGNED VOUCHERS (ADMIN ONLY) */}
             {deliverySubTab === 'unassigned' && isAdmin && (() => {
@@ -4066,17 +4083,17 @@ function App() {
                           );
                         })}
                       </div>
-                      {drTotalPages > 1 && (
-                        <div style={{ borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden', backgroundColor: '#fff' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.6rem 1rem', fontSize: '0.78rem', color: '#64748b', flexWrap: 'wrap', gap: '0.5rem' }}>
-                            <span>{sortedDeliveries.length} total · Page {drEffPage} of {drTotalPages}</span>
+                      <div style={{ borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden', backgroundColor: '#fff' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.6rem 1rem', fontSize: '0.78rem', color: '#64748b', flexWrap: 'wrap', gap: '0.5rem' }}>
+                          <span>{sortedDeliveries.length} total · Page {drEffPage} of {drTotalPages}</span>
+                          {drTotalPages > 1 && (
                             <div style={{ display: 'flex', gap: '0.4rem' }}>
                               <button type="button" onClick={() => setDeliveryReportPage(p => Math.max(1, p - 1))} disabled={drEffPage === 1} style={{ padding: '0.25rem 0.65rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: drEffPage === 1 ? '#f8fafc' : '#fff', color: drEffPage === 1 ? '#cbd5e1' : '#334155', cursor: drEffPage === 1 ? 'default' : 'pointer', fontWeight: '600', fontSize: '0.75rem' }}>← Prev</button>
                               <button type="button" onClick={() => setDeliveryReportPage(p => Math.min(drTotalPages, p + 1))} disabled={drEffPage === drTotalPages} style={{ padding: '0.25rem 0.65rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: drEffPage === drTotalPages ? '#f8fafc' : '#fff', color: drEffPage === drTotalPages ? '#cbd5e1' : '#334155', cursor: drEffPage === drTotalPages ? 'default' : 'pointer', fontWeight: '600', fontSize: '0.75rem' }}>Next →</button>
                             </div>
-                          </div>
+                          )}
                         </div>
-                      )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -4091,6 +4108,7 @@ function App() {
         {activeTab === 'Collections' && (
           <div className="animate-fade-in" style={{ width: '100%', paddingBottom: '1.5rem' }}>
 
+            <div className="tab-sticky-header">
             {/* Header section */}
             <div style={{ marginBottom: '0.4rem' }}>
               <h1 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#0f172a', margin: 0 }}>
@@ -4210,6 +4228,7 @@ function App() {
                 </span>
               </button>
             </div>
+            </div>{/* end tab-sticky-header */}
 
             {/* TAB CONTENT: UNASSIGNED COLLECTION VOUCHERS (ADMIN ONLY) */}
             {collectionSubTab === 'unassigned' && isAdmin && (() => {
@@ -4884,17 +4903,17 @@ function App() {
                       );
                     })}
                   </div>
-                  {crTotalPages > 1 && (
-                    <div style={{ borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden', backgroundColor: '#fff' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.6rem 1rem', fontSize: '0.78rem', color: '#64748b', flexWrap: 'wrap', gap: '0.5rem' }}>
-                        <span>{sortedCollections.length} total · Page {crEffPage} of {crTotalPages}</span>
+                  <div style={{ borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden', backgroundColor: '#fff' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.6rem 1rem', fontSize: '0.78rem', color: '#64748b', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <span>{sortedCollections.length} total · Page {crEffPage} of {crTotalPages}</span>
+                      {crTotalPages > 1 && (
                         <div style={{ display: 'flex', gap: '0.4rem' }}>
                           <button type="button" onClick={() => setCollectionReportPage(p => Math.max(1, p - 1))} disabled={crEffPage === 1} style={{ padding: '0.25rem 0.65rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: crEffPage === 1 ? '#f8fafc' : '#fff', color: crEffPage === 1 ? '#cbd5e1' : '#334155', cursor: crEffPage === 1 ? 'default' : 'pointer', fontWeight: '600', fontSize: '0.75rem' }}>← Prev</button>
                           <button type="button" onClick={() => setCollectionReportPage(p => Math.min(crTotalPages, p + 1))} disabled={crEffPage === crTotalPages} style={{ padding: '0.25rem 0.65rem', border: '1px solid #e2e8f0', borderRadius: '6px', background: crEffPage === crTotalPages ? '#f8fafc' : '#fff', color: crEffPage === crTotalPages ? '#cbd5e1' : '#334155', cursor: crEffPage === crTotalPages ? 'default' : 'pointer', fontWeight: '600', fontSize: '0.75rem' }}>Next →</button>
                         </div>
-                      </div>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
               )}
             </div>
@@ -5024,12 +5043,56 @@ function App() {
         {activeTab === 'Master' && isAdmin && (
           <div className="animate-fade-in" style={{ width: '100%', paddingBottom: '3rem' }}>
 
-            {/* Title — desktop only */}
-            <h1 className="tab-full" style={{ fontSize: '1.35rem', fontWeight: '800', margin: '0 0 0.75rem 0', display: 'block' }}>
-              {masterSubTab === 'itemMaster' ? 'Item Master' : 'Ledger Master'}
-            </h1>
+            {/* Title — shown only when a sub-tab is selected */}
+            {masterSubTab && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                <button
+                  onClick={() => setMasterSubTab(null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.25rem', display: 'flex', alignItems: 'center', color: '#64748b' }}
+                >
+                  <ChevronRight size={18} style={{ transform: 'rotate(180deg)' }} />
+                </button>
+                <h1 style={{ fontSize: '1.35rem', fontWeight: '800', margin: 0 }}>
+                  {masterSubTab === 'itemMaster' ? 'Item Master' : 'Ledger Master'}
+                </h1>
+              </div>
+            )}
 
-
+            {/* Sub-tab selector — shown when no sub-tab chosen */}
+            {!masterSubTab && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.5rem' }}>
+                <h1 style={{ fontSize: '1.35rem', fontWeight: '800', margin: '0 0 0.25rem 0' }}>Master</h1>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  {[
+                    { key: 'itemMaster', label: 'Item Master', desc: 'View and manage stock items synced from Tally', icon: <Package size={22} /> },
+                    { key: 'ledgerMaster', label: 'Ledger Master', desc: 'View and manage ledger accounts synced from Tally', icon: <BookOpen size={22} /> },
+                  ].map(opt => (
+                    <button
+                      key={opt.key}
+                      onClick={() => setMasterSubTab(opt.key)}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: '1rem',
+                        padding: '1rem 1.25rem', borderRadius: '12px',
+                        border: '1.5px solid #e2e8f0', background: '#fff',
+                        cursor: 'pointer', textAlign: 'left', width: '100%',
+                        transition: 'border-color 0.15s, box-shadow 0.15s',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = '#ef4444'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(239,68,68,0.08)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none'; }}
+                    >
+                      <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: '#fff1f2', color: '#ef4444', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        {opt.icon}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: '700', fontSize: '0.95rem', color: '#0f172a' }}>{opt.label}</div>
+                        <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.15rem' }}>{opt.desc}</div>
+                      </div>
+                      <ChevronRight size={16} style={{ marginLeft: 'auto', color: '#94a3b8', flexShrink: 0 }} />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* ITEM MASTER */}
             {masterSubTab === 'itemMaster' && (
@@ -5806,6 +5869,43 @@ function App() {
                     </div>
                   </div>
                 </div>
+
+                {/* SECTION 3: PERMISSIONS (employee only) */}
+                {newRole === 'user' && (
+                  <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '0.75rem' }}>
+                    <h4 style={{ color: '#ef4444', fontSize: '0.7rem', fontWeight: '800', letterSpacing: '0.05em', textTransform: 'uppercase', marginBottom: '0.6rem' }}>
+                      Tab Permissions
+                    </h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                      {/* Header row */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 48px 52px 40px 48px', gap: '0.25rem', alignItems: 'center', paddingBottom: '0.25rem', borderBottom: '1px solid #f1f5f9' }}>
+                        <span style={{ fontSize: '0.65rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase' }}>Tab</span>
+                        {['View', 'Create', 'Edit', 'Delete'].map(a => (
+                          <span key={a} style={{ fontSize: '0.6rem', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', textAlign: 'center' }}>{a}</span>
+                        ))}
+                      </div>
+                      {/* Permission rows */}
+                      {['Deliveries', 'Collections', 'Orders', 'Master'].map(tab => (
+                        <div key={tab} style={{ display: 'grid', gridTemplateColumns: '1fr 48px 52px 40px 48px', gap: '0.25rem', alignItems: 'center', padding: '0.35rem 0.5rem', borderRadius: '8px', backgroundColor: '#f8fafc' }}>
+                          <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#0f172a' }}>{tab}</span>
+                          {['view', 'create', 'edit', 'delete'].map(action => (
+                            <div key={action} style={{ display: 'flex', justifyContent: 'center' }}>
+                              <input
+                                type="checkbox"
+                                checked={newPermissions[tab][action]}
+                                onChange={e => setNewPermissions(prev => ({
+                                  ...prev,
+                                  [tab]: { ...prev[tab], [action]: e.target.checked }
+                                }))}
+                                style={{ width: '16px', height: '16px', accentColor: '#ef4444', cursor: 'pointer' }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
               </div>
               
@@ -7009,7 +7109,7 @@ function App() {
           <span>Orders</span>
         </button>
         {isAdmin && (
-          <button className={`mobile-bottom-nav-item${activeTab === 'Master' ? ' active' : ''}`} onClick={() => { setActiveTab('Master'); setMasterSubTab('itemMaster'); }}>
+          <button className={`mobile-bottom-nav-item${activeTab === 'Master' ? ' active' : ''}`} onClick={() => { setActiveTab('Master'); setMasterSubTab(null); }}>
             <Package size={20} />
             <span>Master</span>
           </button>

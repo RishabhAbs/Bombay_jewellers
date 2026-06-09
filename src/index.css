@@ -1002,6 +1002,11 @@ select.form-input {
   display: none;
 }
 
+/* Sticky tab header (header + sub-tab nav) */
+.tab-sticky-header {
+  position: static;
+}
+
 /* ─── MOBILE RESPONSIVE STYLES ─────────────────────────────────────────────── */
 
 /* Hamburger: hidden on desktop */
@@ -1030,7 +1035,9 @@ select.form-input {
   .navbar {
     padding: 0 1rem;
     height: 60px;
-    position: relative;
+    position: sticky;
+    top: 0;
+    z-index: 50;
   }
 
   .navbar-left {
@@ -1142,14 +1149,19 @@ select.form-input {
     stroke: var(--primary);
   }
 
-  /* Add bottom padding so content doesn't hide behind bottom nav */
-  .dashboard-container {
-    padding-bottom: 74px;
-  }
-
   /* ── Dashboard Container ── */
   .dashboard-container {
-    padding: 0.75rem 0.75rem;
+    padding: 0.75rem 0.75rem 90px;
+  }
+
+  /* ── Sticky tab header on mobile ── */
+  .tab-sticky-header {
+    position: sticky;
+    top: 60px;
+    z-index: 40;
+    background: var(--bg-app, #f8fafc);
+    margin: -0.75rem -0.75rem 0;
+    padding: 0.75rem 0.75rem 0;
   }
 
   .dashboard-header {
